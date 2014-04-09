@@ -12,10 +12,9 @@ import (
 
 var SuppressOutput bool
 
-// Run given command after appending the variableName to the args.
-func Run(command []string, variableName string) (elapsed time.Duration) {
-	fullCommand := append(command, variableName)
-	cmd := exec.Command(fullCommand[0], fullCommand[1:]...)
+// Run given command, returning the time elapsed in the execution.
+func Run(command []string) time.Duration {
+	cmd := exec.Command(command[0], command[1:]...)
 
 	if !SuppressOutput {
 		cmd.Stdout = os.Stdout
@@ -32,18 +31,36 @@ func Run(command []string, variableName string) (elapsed time.Duration) {
 		panic(fmt.Sprintf("Command exited with error code: %v", err))
 	}
 
-	elapsed = time.Since(start)
-	return
+	return time.Since(start)
 }
 
 // RepeatedlyRun the provided command the given number of times.
-func RepeatedlyRun(n int, command []string, variableName string, durations chan time.Duration) {
+func RepeatedlyRun(n int, command []string, durations chan time.Duration) {
 	for i := 0; i < n; i++ {
-		durations <- Run(command, variableName)
+		durations <- Run(command)
 	}
 }
 
-// ComputeStats computes min, max, mean for given array of times
+// LaunchThreads to run the given command.
+func LaunchThreads(threads int, repetitions int, command []string) []time.Duration {
+	totalRuns := threads * repetitions
+
+	// Run
+	results := make(chan time.Duration, totalRuns)
+	for i := 0; i < threads; i++ {
+		go RepeatedlyRun(repetitions, command, results)
+	}
+
+	// Collect results
+	durations := make([]time.Duration, 0, totalRuns)
+	for len(durations) < totalRuns {
+		durations = append(durations, <-results)
+	}
+
+	return durations
+}
+
+// ComputeStats computes min, max, mean for given array of times.
 // This function stolen verbatim from Wuffy by tp@square.
 func ComputeStats(times []time.Duration) (min time.Duration, max time.Duration, mean time.Duration) {
 	min = time.Duration(math.MaxInt64)
@@ -62,10 +79,10 @@ func ComputeStats(times []time.Duration) (min time.Duration, max time.Duration, 
 }
 
 // PrintStats about the durations of execution.
-func PrintStats(variableName string, durations []time.Duration) {
+func PrintStats(header string, durations []time.Duration) {
 	min, max, mean := ComputeStats(durations)
-	fmt.Printf("%s\n-------------\nn=%d\nMin: %v\nMax: %v\nMean: %v\n\n",
-		variableName, len(durations), min, max, mean)
+	fmt.Printf("\n%s\n-------------\nn=%d\nMin: %v\nMax: %v\nMean: %v\n\n",
+		header, len(durations), min, max, mean)
 }
 
 // GetFilenames returns the names of all the files in the given directory.
@@ -85,22 +102,9 @@ func main() {
 	flag.Parse()
 	command := flag.Args()
 
-	totalRuns := (*repetitions) * (*threads)
 	for _, file := range GetFilenames(".") {
-		// Run
-		results := make(chan time.Duration, totalRuns)
-		for i := 0; i < *threads; i++ {
-			go RepeatedlyRun(*repetitions, command, file, results)
-		}
-
-		// Collect results
-		durations := make([]time.Duration, 0, totalRuns)
-		for len(durations) < totalRuns {
-			durations = append(durations, <-results)
-		}
-
-		// Show results
-		fmt.Println()
+		fullCommand := append(command, file)
+		durations := LaunchThreads(*threads, *repetitions, fullCommand)
 		PrintStats(file, durations)
 	}
 }
