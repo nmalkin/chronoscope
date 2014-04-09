@@ -41,7 +41,7 @@ func RepeatedlyRun(n int, command []string, durations chan time.Duration) {
 	}
 }
 
-// LaunchThreads to run the given command.
+// LaunchThreads to run the given command in the specified number of goroutines.
 func LaunchThreads(threads int, repetitions int, command []string) []time.Duration {
 	totalRuns := threads * repetitions
 
@@ -87,7 +87,7 @@ func PrintStats(header string, durations []time.Duration) {
 
 // GetFilenames returns the names of all the files in the given directory.
 func GetFilenames(directory string) []string {
-	files, _ := ioutil.ReadDir(".")
+	files, _ := ioutil.ReadDir(directory)
 	filenames := make([]string, len(files))
 	for i, file := range files {
 		filenames[i] = file.Name()
@@ -96,13 +96,14 @@ func GetFilenames(directory string) []string {
 }
 
 func main() {
+	threads := flag.Int("threads", 1, "number of threads")
 	repetitions := flag.Int("n", 0, "how many times each thread will run the command")
 	flag.BoolVar(&SuppressOutput, "quiet", false, "suppress command output")
-	threads := flag.Int("threads", 1, "number of threads")
+	directory := flag.String("dir", ".", "directory whose files to use")
 	flag.Parse()
 	command := flag.Args()
 
-	for _, file := range GetFilenames(".") {
+	for _, file := range GetFilenames(*directory) {
 		fullCommand := append(command, file)
 		durations := LaunchThreads(*threads, *repetitions, fullCommand)
 		PrintStats(file, durations)
