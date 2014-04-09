@@ -10,12 +10,16 @@ import (
 	"time"
 )
 
+var SuppressOutput bool
+
 // Run given command after appending the variableName to the args.
 func Run(command []string, variableName string) (elapsed time.Duration) {
 	fullCommand := append(command, variableName)
 	cmd := exec.Command(fullCommand[0], fullCommand[1:]...)
 
-	cmd.Stdout = os.Stdout
+	if !SuppressOutput {
+		cmd.Stdout = os.Stdout
+	}
 
 	start := time.Now()
 	err := cmd.Start()
@@ -78,6 +82,7 @@ func GetFilenames(directory string) []string {
 
 func main() {
 	repetitions := flag.Int("n", 0, "how many times to run each command")
+	flag.BoolVar(&SuppressOutput, "q", false, "suppress command output")
 	flag.Parse()
 	command := flag.Args()
 
