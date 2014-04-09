@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 )
 
@@ -103,9 +104,10 @@ func main() {
 	flag.Parse()
 	command := flag.Args()
 
-	for _, file := range GetFilenames(*directory) {
-		fullCommand := append(command, file)
+	for _, filename := range GetFilenames(*directory) {
+		path := filepath.Join(*directory, filename)
+		fullCommand := append(command, path)
 		durations := LaunchThreads(*threads, *repetitions, fullCommand)
-		PrintStats(file, durations)
+		PrintStats(filename, durations)
 	}
 }
