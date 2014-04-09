@@ -37,12 +37,10 @@ func Run(command []string, variableName string) (elapsed time.Duration) {
 }
 
 // RepeatedlyRun the provided command the given number of times.
-func RepeatedlyRun(n int, command []string, variableName string) *[]time.Duration {
-	durations := make([]time.Duration, n)
+func RepeatedlyRun(n int, command []string, variableName string, durations chan time.Duration) {
 	for i := 0; i < n; i++ {
-		durations[i] = Run(command, variableName)
+		durations <- Run(command, variableName)
 	}
-	return &durations
 }
 
 // ComputeStats computes min, max, mean for given array of times
@@ -64,10 +62,10 @@ func ComputeStats(times []time.Duration) (min time.Duration, max time.Duration, 
 }
 
 // PrintStats about the durations of execution.
-func PrintStats(variableName string, repetitions int, durations *[]time.Duration) {
-	min, max, mean := ComputeStats(*durations)
+func PrintStats(variableName string, durations []time.Duration) {
+	min, max, mean := ComputeStats(durations)
 	fmt.Printf("%s\n-------------\nn=%d\nMin: %v\nMax: %v\nMean: %v\n\n",
-		variableName, repetitions, min, max, mean)
+		variableName, len(durations), min, max, mean)
 }
 
 // GetFilenames returns the names of all the files in the given directory.
@@ -81,15 +79,28 @@ func GetFilenames(directory string) []string {
 }
 
 func main() {
-	repetitions := flag.Int("n", 0, "how many times to run each command")
-	flag.BoolVar(&SuppressOutput, "q", false, "suppress command output")
+	repetitions := flag.Int("n", 0, "how many times each thread will run the command")
+	flag.BoolVar(&SuppressOutput, "quiet", false, "suppress command output")
+	threads := flag.Int("threads", 1, "number of threads")
 	flag.Parse()
 	command := flag.Args()
 
+	totalRuns := (*repetitions) * (*threads)
 	for _, file := range GetFilenames(".") {
-		durations := RepeatedlyRun(*repetitions, command, file)
-		fmt.Println()
-		PrintStats(file, *repetitions, durations)
-	}
+		// Run
+		results := make(chan time.Duration, totalRuns)
+		for i := 0; i < *threads; i++ {
+			go RepeatedlyRun(*repetitions, command, file, results)
+		}
 
+		// Collect results
+		durations := make([]time.Duration, 0, totalRuns)
+		for len(durations) < totalRuns {
+			durations = append(durations, <-results)
+		}
+
+		// Show results
+		fmt.Println()
+		PrintStats(file, durations)
+	}
 }
